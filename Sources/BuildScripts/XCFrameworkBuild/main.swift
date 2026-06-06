@@ -425,7 +425,11 @@ private class BuildMPV: BaseBuild {
             array.append("-Dvideotoolbox-pl=enabled")
             array.append("-Dswift-build=disabled")
             array.append("-Daudiounit=enabled")
-            array.append("-Davfoundation=disabled")
+            if platform == .ios || platform == .isimulator {
+                array.append("-Davfoundation=enabled")
+            } else {
+                array.append("-Davfoundation=disabled")
+            }
             array.append("-Dlua=disabled")
             if platform == .maccatalyst {
                 array.append("-Dcocoa=disabled")

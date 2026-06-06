@@ -11,30 +11,11 @@ let package = Package(
             targets: ["_MPVKit"]
         ),
         .library(
-            name: "DesktopMPVBridge",
-            type: .dynamic,
-            targets: ["DesktopMPVBridge"]
-        ),
-        .library(
             name: "MPVKit-GPL",
             targets: ["_MPVKit-GPL"]
         ),
     ],
     targets: [
-        .target(
-            name: "DesktopMPVBridge",
-            dependencies: [
-                "Libmpv",
-                "_MPVKit",
-            ],
-            path: "Sources/DesktopMPVBridge",
-            linkerSettings: [
-                .linkedFramework("Foundation"),
-                .linkedFramework("AppKit"),
-                .linkedFramework("SwiftUI"),
-                .linkedFramework("OpenGL"),
-            ]
-        ),
         .target(
             name: "_MPVKit",
             dependencies: [
@@ -260,8 +241,7 @@ let package = Package(
 
         .binaryTarget(
             name: "Libplacebo",
-            url: "https://github.com/mpvkit/libplacebo-build/releases/download/7.351.0-2512/Libplacebo.xcframework.zip",
-            checksum: "3b2bd57b82549566963effadf0891a141448d9f89c7d48fca0b8f823b854bac6"
+            path: "dist/release/xcframework/Libplacebo.xcframework"
         ),
 
         .binaryTarget(
@@ -272,38 +252,31 @@ let package = Package(
 
         .binaryTarget(
             name: "Libavcodec",
-            url: "https://github.com/mpvkit/MPVKit/releases/download/0.41.0/Libavcodec.xcframework.zip",
-            checksum: "6ccb6b5cf8fc05665f2ee4958f640b328755414946e9541adda40c536568ec43"
+            path: "dist/release/xcframework/Libavcodec.xcframework"
         ),
         .binaryTarget(
             name: "Libavdevice",
-            url: "https://github.com/mpvkit/MPVKit/releases/download/0.41.0/Libavdevice.xcframework.zip",
-            checksum: "f571fbdef20e8d94ce6c8692eeee1fdff627e691cfcd2de5f9f294655c8cc405"
+            path: "dist/release/xcframework/Libavdevice.xcframework"
         ),
         .binaryTarget(
             name: "Libavformat",
-            url: "https://github.com/mpvkit/MPVKit/releases/download/0.41.0/Libavformat.xcframework.zip",
-            checksum: "7ff0af2e5ee5a1f5d278caedb96a395c7c29f563f09cdf977b6670bc9724cb7d"
+            path: "dist/release/xcframework/Libavformat.xcframework"
         ),
         .binaryTarget(
             name: "Libavfilter",
-            url: "https://github.com/mpvkit/MPVKit/releases/download/0.41.0/Libavfilter.xcframework.zip",
-            checksum: "965d1271c37181b1fe23d34d0c7c1cb7626a080d5925d3bdb1d1f84afd7b3d7d"
+            path: "dist/release/xcframework/Libavfilter.xcframework"
         ),
         .binaryTarget(
             name: "Libavutil",
-            url: "https://github.com/mpvkit/MPVKit/releases/download/0.41.0/Libavutil.xcframework.zip",
-            checksum: "7a8716f9ac793e2da895b9f87c37b56a9a2065f2c1f31b60f3d3589bea6c50a1"
+            path: "dist/release/xcframework/Libavutil.xcframework"
         ),
         .binaryTarget(
             name: "Libswresample",
-            url: "https://github.com/mpvkit/MPVKit/releases/download/0.41.0/Libswresample.xcframework.zip",
-            checksum: "7beb6e337b69882771c58281d42a449d8810e836e7ce07c6f91827267ab4fabd"
+            path: "dist/release/xcframework/Libswresample.xcframework"
         ),
         .binaryTarget(
             name: "Libswscale",
-            url: "https://github.com/mpvkit/MPVKit/releases/download/0.41.0/Libswscale.xcframework.zip",
-            checksum: "e9d660dc6eb27d20a25aa5659a966f07cf1a97ed9049ec19e8a06b3f2aec6b41"
+            path: "dist/release/xcframework/Libswscale.xcframework"
         ),
 
         .binaryTarget(
@@ -320,8 +293,7 @@ let package = Package(
 
         .binaryTarget(
             name: "Libmpv",
-            url: "https://github.com/mpvkit/MPVKit/releases/download/0.41.0/Libmpv.xcframework.zip",
-            checksum: "9ff5077d675a1e12bec98db167a49f46eb57dba567f40558b7758d4f12fb3ae7"
+            path: "dist/release/xcframework/Libmpv.xcframework"
         ),
         //AUTO_GENERATE_TARGETS_END//
     ]

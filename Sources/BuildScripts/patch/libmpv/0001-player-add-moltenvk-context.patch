@@ -61,7 +61,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..445b907f795b24b8df80389394d4ae7b3f94c6e5
 --- /dev/null
 +++ forkDstPrefix/video/out/vulkan/context_moltenvk.m
-@@ -0,0 +1,270 @@
+@@ -0,0 +1,374 @@
 +/*
 + * This file is part of mpv.
 + *
@@ -87,6 +87,7 @@ index 0000000000000000000000000000000000000000..445b907f795b24b8df80389394d4ae7b
 +#include <math.h>
 +
 +#include "video/out/gpu/context.h"
++#include "osdep/timer.h"
 +#include "common.h"
 +#include "context.h"
 +#include "utils.h"
@@ -94,6 +95,9 @@ index 0000000000000000000000000000000000000000..445b907f795b24b8df80389394d4ae7b
 +struct priv {
 +    struct mpvk_ctx vk;
 +    CAMetalLayer *layer;
++    CGSize last_drawable_size;
++    CGSize pending_drawable_size;
++    int64_t pending_resize_ns;
 +    bool logged_hdr_target;
 +};
 +
@@ -128,6 +132,18 @@ index 0000000000000000000000000000000000000000..445b907f795b24b8df80389394d4ae7b
 +    typedef CGColorSpaceRef (*Getter)(id, SEL);
 +    Getter getter = (Getter)[layer methodForSelector:selector];
 +    return getter(layer, selector);
++}
++
++static bool set_layer_color_space(CAMetalLayer *layer, CGColorSpaceRef color_space)
++{
++    SEL selector = NSSelectorFromString(@"setColorspace:");
++    if (!layer || !color_space || !selector || ![layer respondsToSelector:selector])
++        return false;
++
++    typedef void (*Setter)(id, SEL, CGColorSpaceRef);
++    Setter setter = (Setter)[layer methodForSelector:selector];
++    setter(layer, selector, color_space);
++    return true;
 +}
 +
 +static bool color_space_name_equals(CGColorSpaceRef color_space, CFStringRef expected)
@@ -180,6 +196,27 @@ index 0000000000000000000000000000000000000000..445b907f795b24b8df80389394d4ae7b
 +    return NSScreen.mainScreen ?: NSScreen.screens.firstObject;
 +}
 +
++static bool layer_in_live_resize(CAMetalLayer *layer)
++{
++    SEL layer_selector = NSSelectorFromString(@"isNuvioLiveResize");
++    if (layer && layer_selector && [layer respondsToSelector:layer_selector]) {
++        typedef BOOL (*Getter)(id, SEL);
++        Getter getter = (Getter)[layer methodForSelector:layer_selector];
++        if (getter(layer, layer_selector))
++            return true;
++    }
++
++    id delegate = layer.delegate;
++    SEL view_selector = NSSelectorFromString(@"inLiveResize");
++    if (delegate && view_selector && [delegate respondsToSelector:view_selector]) {
++        typedef BOOL (*Getter)(id, SEL);
++        Getter getter = (Getter)[delegate methodForSelector:view_selector];
++        return getter(delegate, view_selector);
++    }
++
++    return false;
++}
++
 +static double screen_edr_max(NSScreen *screen)
 +{
 +    NSScreen *target = screen ?: NSScreen.mainScreen;
@@ -230,6 +267,55 @@ index 0000000000000000000000000000000000000000..445b907f795b24b8df80389394d4ae7b
 +
 +    CGSize size = p->layer.drawableSize;
 +    return size.width > 0.0 && size.height > 0.0;
++}
++
++static bool drawable_size_valid(CGSize size)
++{
++    return isfinite(size.width) && isfinite(size.height) &&
++           size.width > 1.0 && size.height > 1.0;
++}
++
++static bool drawable_size_changed(CGSize current, CGSize previous)
++{
++    return fabs(current.width - previous.width) >= 1.0 ||
++           fabs(current.height - previous.height) >= 1.0;
++}
++
++static bool moltenvk_resize_to_size(struct ra_ctx *ctx, CGSize size, const char *reason)
++{
++    struct priv *p = ctx->priv;
++    if (!drawable_size_valid(size))
++        return false;
++
++    int width = MPMAX(1, (int)llround(size.width));
++    int height = MPMAX(1, (int)llround(size.height));
++    ctx->vo->dwidth = width;
++    ctx->vo->dheight = height;
++    p->last_drawable_size = size;
++    p->pending_drawable_size = CGSizeZero;
++    p->pending_resize_ns = 0;
++    MP_INFO(ctx, "MoltenVK resize drawable=%dx%d reason=%s\n", width, height, reason ? reason : "unknown");
++
++    CGColorSpaceRef previous_color_space = layer_color_space(p->layer);
++    if (previous_color_space)
++        CFRetain(previous_color_space);
++
++    bool ok = ra_vk_ctx_resize(ctx, width, height);
++    if (previous_color_space) {
++        set_layer_color_space(p->layer, previous_color_space);
++        CFRelease(previous_color_space);
++    }
++
++    return ok;
++}
++
++static bool moltenvk_resize(struct ra_ctx *ctx)
++{
++    struct priv *p = ctx->priv;
++    if (!p->layer)
++        return false;
++
++    return moltenvk_resize_to_size(ctx, p->layer.drawableSize, "reconfig");
 +}
 +
 +static pl_color_space_t moltenvk_preferred_csp(struct ra_ctx *ctx)
@@ -313,14 +399,32 @@ index 0000000000000000000000000000000000000000..445b907f795b24b8df80389394d4ae7b
 +
 +static bool moltenvk_reconfig(struct ra_ctx *ctx)
 +{
-+    struct priv *p = ctx->priv;
-+    CGSize s = p->layer.drawableSize;
-+    ra_vk_ctx_resize(ctx, s.width, s.height);
-+    return true;
++    return moltenvk_resize(ctx);
 +}
 +
 +static int moltenvk_control(struct ra_ctx *ctx, int *events, int request, void *arg)
 +{
++    struct priv *p = ctx->priv;
++
++    if (request == VOCTRL_CHECK_EVENTS && p->layer) {
++        CGSize size = p->layer.drawableSize;
++        if (drawable_size_valid(size) && drawable_size_changed(size, p->last_drawable_size)) {
++            if (layer_in_live_resize(p->layer)) {
++                p->pending_drawable_size = size;
++                p->pending_resize_ns = mp_time_ns();
++                return VO_TRUE;
++            }
++
++            const char *reason = p->pending_resize_ns > 0
++                ? "live-resize-ended"
++                : "size-changed";
++            if (!moltenvk_resize_to_size(ctx, size, reason))
++                return VO_ERROR;
++            *events |= VO_EVENT_RESIZE | VO_EVENT_EXPOSE;
++        }
++        return VO_TRUE;
++    }
++
 +    return VO_NOTIMPL;
 +}
 +

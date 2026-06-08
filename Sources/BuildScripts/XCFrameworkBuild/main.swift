@@ -389,7 +389,6 @@ private class BuildMPV: BaseBuild {
             "-Diconv=enabled",
             "-Duchardet=enabled",
             "-Dvulkan=enabled",
-            "-Dmoltenvk=enabled",  // from patch option
 
             "-Djavascript=disabled",
             "-Dzimg=disabled",
@@ -412,6 +411,7 @@ private class BuildMPV: BaseBuild {
             array.append("-Dcplayer=false")
         }
         if platform == .macos {
+            array.append("-Dmoltenvk=enabled")  // embedded CAMetalLayer context is AppKit/macOS-only
             array.append("-Dswift-flags=-sdk \(platform.isysroot) -target \(platform.deploymentTarget(arch))")
             array.append("-Dcocoa=enabled")
             array.append("-Dcoreaudio=enabled")
@@ -423,6 +423,7 @@ private class BuildMPV: BaseBuild {
         } else {
             array.append("-Dvideotoolbox-gl=disabled")
             array.append("-Dvideotoolbox-pl=enabled")
+            array.append("-Dmoltenvk=disabled")
             array.append("-Dswift-build=disabled")
             array.append("-Daudiounit=enabled")
             if platform == .ios || platform == .isimulator {

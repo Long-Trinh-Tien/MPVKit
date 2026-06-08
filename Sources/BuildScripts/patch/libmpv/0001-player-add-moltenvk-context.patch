@@ -61,7 +61,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..445b907f795b24b8df80389394d4ae7b3f94c6e5
 --- /dev/null
 +++ forkDstPrefix/video/out/vulkan/context_moltenvk.m
-@@ -0,0 +1,96 @@
+@@ -0,0 +1,270 @@
 +/*
 + * This file is part of mpv.
 + *
@@ -79,10 +79,14 @@ index 0000000000000000000000000000000000000000..445b907f795b24b8df80389394d4ae7b
 + * License along with mpv.  If not, see <http://www.gnu.org/licenses/>.
 + */
 +
++#import <AppKit/AppKit.h>
 +#include <CoreGraphics/CoreGraphics.h>
++#import <Metal/Metal.h>
 +#include <QuartzCore/CAMetalLayer.h>
 +#include <MoltenVK/mvk_vulkan.h>
++#include <math.h>
 +
++#include "video/out/gpu/context.h"
 +#include "common.h"
 +#include "context.h"
 +#include "utils.h"
@@ -90,7 +94,172 @@ index 0000000000000000000000000000000000000000..445b907f795b24b8df80389394d4ae7b
 +struct priv {
 +    struct mpvk_ctx vk;
 +    CAMetalLayer *layer;
++    bool logged_hdr_target;
 +};
++
++static void set_bool_with_selector(id target, NSString *selector_name, BOOL value)
++{
++    SEL selector = NSSelectorFromString(selector_name);
++    if (!target || !selector || ![target respondsToSelector:selector])
++        return;
++
++    typedef void (*Setter)(id, SEL, BOOL);
++    Setter setter = (Setter)[target methodForSelector:selector];
++    setter(target, selector, value);
++}
++
++static double double_with_selector(id target, NSString *selector_name, double fallback)
++{
++    SEL selector = NSSelectorFromString(selector_name);
++    if (!target || !selector || ![target respondsToSelector:selector])
++        return fallback;
++
++    typedef double (*Getter)(id, SEL);
++    Getter getter = (Getter)[target methodForSelector:selector];
++    return getter(target, selector);
++}
++
++static CGColorSpaceRef layer_color_space(CAMetalLayer *layer)
++{
++    SEL selector = NSSelectorFromString(@"colorspace");
++    if (!layer || !selector || ![layer respondsToSelector:selector])
++        return NULL;
++
++    typedef CGColorSpaceRef (*Getter)(id, SEL);
++    Getter getter = (Getter)[layer methodForSelector:selector];
++    return getter(layer, selector);
++}
++
++static bool color_space_name_equals(CGColorSpaceRef color_space, CFStringRef expected)
++{
++    if (!color_space || !expected)
++        return false;
++
++    CFStringRef name = CGColorSpaceCopyName(color_space);
++    if (!name)
++        return false;
++
++    bool matches = CFStringCompare(name, expected, 0) == kCFCompareEqualTo;
++    CFRelease(name);
++    return matches;
++}
++
++static bool color_space_name_contains(CGColorSpaceRef color_space, CFStringRef needle)
++{
++    if (!color_space || !needle)
++        return false;
++
++    CFStringRef name = CGColorSpaceCopyName(color_space);
++    if (!name)
++        return false;
++
++    CFRange range = CFStringFind(name, needle, kCFCompareCaseInsensitive);
++    bool matches = range.location != kCFNotFound;
++    CFRelease(name);
++    return matches;
++}
++
++static bool layer_color_space_is_hdr(CAMetalLayer *layer)
++{
++    CGColorSpaceRef color_space = layer_color_space(layer);
++    return color_space_name_equals(color_space, kCGColorSpaceITUR_2100_PQ) ||
++           color_space_name_contains(color_space, CFSTR("2100")) ||
++           color_space_name_contains(color_space, CFSTR("PQ")) ||
++           color_space_name_contains(color_space, CFSTR("HLG"));
++}
++
++static NSScreen *screen_for_layer(CAMetalLayer *layer)
++{
++    id delegate = layer.delegate;
++    if ([delegate isKindOfClass:NSView.class]) {
++        NSScreen *screen = ((NSView *)delegate).window.screen;
++        if (screen)
++            return screen;
++    }
++
++    return NSScreen.mainScreen ?: NSScreen.screens.firstObject;
++}
++
++static double screen_edr_max(NSScreen *screen)
++{
++    NSScreen *target = screen ?: NSScreen.mainScreen;
++    double potential = double_with_selector(
++        target,
++        @"maximumPotentialExtendedDynamicRangeColorComponentValue",
++        1.0
++    );
++    double current = double_with_selector(
++        target,
++        @"maximumExtendedDynamicRangeColorComponentValue",
++        potential
++    );
++    double value = fmax(potential, current);
++    return isfinite(value) && value > 0.0 ? value : 1.0;
++}
++
++static void configure_layer_for_edr(CAMetalLayer *layer)
++{
++    if (!layer)
++        return;
++
++    if (!layer.device) {
++        id<MTLDevice> device = MTLCreateSystemDefaultDevice();
++        layer.device = device;
++#if !__has_feature(objc_arc)
++        [device release];
++#endif
++    }
++
++    layer.pixelFormat = MTLPixelFormatRGBA16Float;
++    layer.framebufferOnly = YES;
++    layer.opaque = YES;
++    set_bool_with_selector(layer, @"setWantsExtendedDynamicRangeContent:", YES);
++}
++
++static int moltenvk_color_depth(struct ra_ctx *ctx)
++{
++    struct priv *p = ctx->priv;
++    return p->layer && p->layer.pixelFormat == MTLPixelFormatRGBA16Float ? 16 : -1;
++}
++
++static bool moltenvk_check_visible(struct ra_ctx *ctx)
++{
++    struct priv *p = ctx->priv;
++    if (!p->layer || p->layer.hidden)
++        return false;
++
++    CGSize size = p->layer.drawableSize;
++    return size.width > 0.0 && size.height > 0.0;
++}
++
++static pl_color_space_t moltenvk_preferred_csp(struct ra_ctx *ctx)
++{
++    struct priv *p = ctx->priv;
++    NSScreen *screen = screen_for_layer(p->layer);
++    double edr_max = screen_edr_max(screen);
++
++    if (!p->layer || edr_max <= 1.0 || !layer_color_space_is_hdr(p->layer))
++        return (pl_color_space_t){0};
++
++    struct pl_color_space csp = pl_color_space_hdr10;
++    csp.primaries = PL_COLOR_PRIM_BT_2020;
++    csp.transfer = PL_COLOR_TRC_PQ;
++    csp.hdr = pl_hdr_metadata_hdr10;
++    csp.hdr.prim = *pl_raw_primaries_get(PL_COLOR_PRIM_BT_2020);
++    csp.hdr.min_luma = PL_COLOR_HDR_BLACK;
++    if (csp.hdr.max_luma <= 0.0f)
++        csp.hdr.max_luma = 1000.0f;
++    csp.hdr.max_cll = csp.hdr.max_luma;
++    csp.hdr.max_fall = 0.0f;
++
++    if (!p->logged_hdr_target) {
++        p->logged_hdr_target = true;
++        MP_INFO(ctx, "MoltenVK HDR target colorspace active primaries=bt.2020 transfer=pq peak=%.0f edr=%.2f\n",
++                csp.hdr.max_luma, edr_max);
++    }
++
++    return csp;
++}
 +
 +static void moltenvk_uninit(struct ra_ctx *ctx)
 +{
@@ -114,12 +283,17 @@ index 0000000000000000000000000000000000000000..445b907f795b24b8df80389394d4ae7b
 +        goto fail;
 +
 +    p->layer = (__bridge CAMetalLayer *)(intptr_t)ctx->vo->opts->WinID;
++    configure_layer_for_edr(p->layer);
 +    VkMetalSurfaceCreateInfoEXT info = {
 +         .sType = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT,
 +         .pLayer = p->layer,
 +    };
 +
-+    struct ra_ctx_params params = {0};
++    struct ra_ctx_params params = {
++        .check_visible = moltenvk_check_visible,
++        .color_depth = moltenvk_color_depth,
++        .preferred_csp = moltenvk_preferred_csp,
++    };
 +
 +    VkInstance inst = vk->vkinst->instance;
 +    VkResult res = vkCreateMetalSurfaceEXT(inst, &info, NULL, &vk->surface);

@@ -6,7 +6,7 @@ struct NuvioSourcesPanel: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.52)
+            NuvioPlayerDesignTokens.ColorToken.panelScrim
                 .onTapGesture { onDismiss() }
 
             VStack(spacing: 0) {
@@ -90,13 +90,13 @@ struct NuvioSourcesPanel: View {
                     }
                 }
             }
-            .frame(maxWidth: 520)
-            .frame(maxHeight: 600)
-            .background(Color(red: 0.12, green: 0.12, blue: 0.12))
-            .clipShape(RoundedRectangle(cornerRadius: 24))
+            .frame(maxWidth: NuvioPlayerDesignTokens.Size.panelMaxWidth)
+            .frame(maxHeight: NuvioPlayerDesignTokens.Size.sourcesPanelMaxHeight)
+            .background(NuvioPlayerDesignTokens.ColorToken.panelSurface)
+            .clipShape(RoundedRectangle(cornerRadius: NuvioPlayerDesignTokens.Radius.xxl))
             .overlay(
-                RoundedRectangle(cornerRadius: 24)
-                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                RoundedRectangle(cornerRadius: NuvioPlayerDesignTokens.Radius.xxl)
+                    .stroke(NuvioPlayerDesignTokens.ColorToken.borderSubtle, lineWidth: 1)
             )
         }
     }

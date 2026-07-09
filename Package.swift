@@ -301,8 +301,8 @@ let package = Package(
 
         .binaryTarget(
             name: "Libmpv",
-            // Local build with the MoltenVK drawable-size resize patch (iOS + macOS slices).
-            path: "dist/release/xcframework/Libmpv.xcframework"
+            url: "https://github.com/NuvioMedia/MPVKit/releases/download/0.41.0-n8.1.2-nuvio.1/Libmpv.xcframework.zip",
+            checksum: "2fd51f15226d2e9834b616ab237a79d6f74080267e40490ae715842f3d66f6d9"
         ),
         //AUTO_GENERATE_TARGETS_END//
     ]

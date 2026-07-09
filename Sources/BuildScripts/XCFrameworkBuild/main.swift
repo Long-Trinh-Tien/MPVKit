@@ -50,7 +50,7 @@ enum Library: String, CaseIterable {
         case .libmpv:
             return "v0.41.0"
         case .FFmpeg:
-            return "n8.0.1"
+            return "n8.1.2"
         case .openssl:
             return "3.3.5"
         case .gnutls:
@@ -60,15 +60,15 @@ enum Library: String, CaseIterable {
         case .gmp:
             return "3.8.11"
         case .libass:
-            return "0.17.4"
+            return "0.17.5"
         case .libunibreak:
-            return "0.17.4"
+            return "0.17.5"
         case .libfreetype:
-            return "0.17.4"
+            return "0.17.5"
         case .libfribidi:
-            return "0.17.4"
+            return "0.17.5"
         case .libharfbuzz:
-            return "0.17.4"
+            return "0.17.5"
         case .libsmbclient:
             return "4.15.13-2512"
         case .libdav1d:    // AV1 decoding
@@ -411,7 +411,7 @@ private class BuildMPV: BaseBuild {
             array.append("-Dcplayer=false")
         }
         if platform == .macos {
-            array.append("-Dmoltenvk=enabled")  // embedded CAMetalLayer context is AppKit/macOS-only
+            array.append("-Dmoltenvk=enabled")
             array.append("-Dswift-flags=-sdk \(platform.isysroot) -target \(platform.deploymentTarget(arch))")
             array.append("-Dcocoa=enabled")
             array.append("-Dcoreaudio=enabled")
@@ -423,7 +423,11 @@ private class BuildMPV: BaseBuild {
         } else {
             array.append("-Dvideotoolbox-gl=disabled")
             array.append("-Dvideotoolbox-pl=enabled")
-            array.append("-Dmoltenvk=disabled")
+            if platform == .ios || platform == .isimulator {
+                array.append("-Dmoltenvk=enabled")
+            } else {
+                array.append("-Dmoltenvk=disabled")
+            }
             array.append("-Dswift-build=disabled")
             array.append("-Daudiounit=enabled")
             if platform == .ios || platform == .isimulator {

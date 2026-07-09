@@ -35,7 +35,7 @@ class ArgumentOptions {
     var enableSplitPlatform: Bool = false
     var enableGPL: Bool = false
     var platforms : [PlatformType] = []
-    var releaseVersion: String = "0.0.0"
+    var releaseVersion: String = "0.41.0-n8.1.2"
 
     init() {
         self.arguments = []
@@ -1445,4 +1445,3 @@ extension URL {
         return url
     }
 }
-

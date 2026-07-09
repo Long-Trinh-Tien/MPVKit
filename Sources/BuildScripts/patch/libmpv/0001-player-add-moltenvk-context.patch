@@ -58,10 +58,10 @@ index e75cb228f8d99462ccecf7780098ea97ae7cfe02..afc17284773204563f4c90b4860758e6
  #endif
 diff --git forkSrcPrefix/video/out/vulkan/context_moltenvk.m forkDstPrefix/video/out/vulkan/context_moltenvk.m
 new file mode 100644
-index 0000000000000000000000000000000000000000..445b907f795b24b8df80389394d4ae7b3f94c6e5
+index 0000000000000000000000000000000000000000..1111111111111111111111111111111111111111
 --- /dev/null
 +++ forkDstPrefix/video/out/vulkan/context_moltenvk.m
-@@ -0,0 +1,374 @@
+@@ -0,0 +1,395 @@
 +/*
 + * This file is part of mpv.
 + *
@@ -79,7 +79,12 @@ index 0000000000000000000000000000000000000000..445b907f795b24b8df80389394d4ae7b
 + * License along with mpv.  If not, see <http://www.gnu.org/licenses/>.
 + */
 +
++#include <TargetConditionals.h>
++#if TARGET_OS_OSX
 +#import <AppKit/AppKit.h>
++#else
++#import <UIKit/UIKit.h>
++#endif
 +#include <CoreGraphics/CoreGraphics.h>
 +#import <Metal/Metal.h>
 +#include <QuartzCore/CAMetalLayer.h>
@@ -184,6 +189,7 @@ index 0000000000000000000000000000000000000000..445b907f795b24b8df80389394d4ae7b
 +           color_space_name_contains(color_space, CFSTR("HLG"));
 +}
 +
++#if TARGET_OS_OSX
 +static NSScreen *screen_for_layer(CAMetalLayer *layer)
 +{
 +    id delegate = layer.delegate;
@@ -195,6 +201,7 @@ index 0000000000000000000000000000000000000000..445b907f795b24b8df80389394d4ae7b
 +
 +    return NSScreen.mainScreen ?: NSScreen.screens.firstObject;
 +}
++#endif
 +
 +static bool layer_in_live_resize(CAMetalLayer *layer)
 +{
@@ -217,6 +224,7 @@ index 0000000000000000000000000000000000000000..445b907f795b24b8df80389394d4ae7b
 +    return false;
 +}
 +
++#if TARGET_OS_OSX
 +static double screen_edr_max(NSScreen *screen)
 +{
 +    NSScreen *target = screen ?: NSScreen.mainScreen;
@@ -233,6 +241,16 @@ index 0000000000000000000000000000000000000000..445b907f795b24b8df80389394d4ae7b
 +    double value = fmax(potential, current);
 +    return isfinite(value) && value > 0.0 ? value : 1.0;
 +}
++#else
++static double screen_edr_max(void)
++{
++    UIScreen *screen = UIScreen.mainScreen;
++    double potential = double_with_selector(screen, @"potentialEDRHeadroom", 1.0);
++    double current = double_with_selector(screen, @"currentEDRHeadroom", potential);
++    double value = fmax(potential, current);
++    return isfinite(value) && value > 0.0 ? value : 1.0;
++}
++#endif
 +
 +static void configure_layer_for_edr(CAMetalLayer *layer)
 +{
@@ -321,8 +339,11 @@ index 0000000000000000000000000000000000000000..445b907f795b24b8df80389394d4ae7b
 +static pl_color_space_t moltenvk_preferred_csp(struct ra_ctx *ctx)
 +{
 +    struct priv *p = ctx->priv;
-+    NSScreen *screen = screen_for_layer(p->layer);
-+    double edr_max = screen_edr_max(screen);
++#if TARGET_OS_OSX
++    double edr_max = screen_edr_max(screen_for_layer(p->layer));
++#else
++    double edr_max = screen_edr_max();
++#endif
 +
 +    if (!p->layer || edr_max <= 1.0 || !layer_color_space_is_hdr(p->layer))
 +        return (pl_color_space_t){0};

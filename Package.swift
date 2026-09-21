@@ -301,8 +301,8 @@ let package = Package(
 
         .binaryTarget(
             name: "Libmpv",
-            url: "https://github.com/NuvioMedia/MPVKit/releases/download/0.41.0-n8.1.2-nuvio.3/Libmpv.xcframework.zip",
-            checksum: "fd47ecfac652c7dd065f09a886f619bd0b3b12778f21ea7d15320eff3814cdd2"
+            url: "https://github.com/NuvioMedia/MPVKit/releases/download/0.41.0-n8.1.2-nuvio.4/Libmpv.xcframework.zip",
+            checksum: "5b228e2e7a151f577162923d760b8f0550208913bd316b343bc52ea99e5c85a6"
         ),
         //AUTO_GENERATE_TARGETS_END//
     ]

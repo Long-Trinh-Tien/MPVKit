@@ -68,7 +68,7 @@ new file mode 100644
 index 0000000000..1b3e13aece
 --- /dev/null
 +++ b/video/out/vo_avfoundation.m
-@@ -0,0 +1,1005 @@
+@@ -0,0 +1,1006 @@
 +/*
 + * This file is part of mpv.
 + *

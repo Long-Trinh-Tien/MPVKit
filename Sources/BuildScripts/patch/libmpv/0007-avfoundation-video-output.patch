@@ -68,7 +68,7 @@ new file mode 100644
 index 0000000000..1b3e13aece
 --- /dev/null
 +++ b/video/out/vo_avfoundation.m
-@@ -0,0 +1,1004 @@
+@@ -0,0 +1,1005 @@
 +/*
 + * This file is part of mpv.
 + *
@@ -771,9 +771,10 @@ index 0000000000..1b3e13aece
 +        MP_VERBOSE(vo, "Display height for subtitle scaling: %d\n", p->display_height);
 +    }
 +
-+    // Create OSD layer only if not in composite mode
++    // Create OSD layer only if not in composite mode. Async so the VO thread
++    // never waits on the main thread (which may be blocked in an mpv call).
 +    if (!p->composite_osd) {
-+        dispatch_sync(dispatch_get_main_queue(), ^{
++        dispatch_async(dispatch_get_main_queue(), ^{
 +            p->osdLayer = [CALayer layer];
 +            CGRect bounds = p->displayLayer.bounds;
 +            p->osdLayer.frame = bounds;
@@ -1015,10 +1016,11 @@ index 0000000000..1b3e13aece
 +        p->swUploadPool = NULL;
 +    }
 +    
-+    if (!p->composite_osd) {
-+        dispatch_sync(dispatch_get_main_queue(), ^{
-+            [p->osdLayer removeFromSuperlayer];
-+            p->osdLayer = nil;
++    if (!p->composite_osd && p->osdLayer) {
++        CALayer *osdLayer = p->osdLayer;
++        p->osdLayer = nil;
++        dispatch_async(dispatch_get_main_queue(), ^{
++            [osdLayer removeFromSuperlayer];
 +        });
 +    }
 +    

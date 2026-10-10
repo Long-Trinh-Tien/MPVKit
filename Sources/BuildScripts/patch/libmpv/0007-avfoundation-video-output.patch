@@ -68,7 +68,7 @@ new file mode 100644
 index 0000000000..1b3e13aece
 --- /dev/null
 +++ b/video/out/vo_avfoundation.m
-@@ -0,0 +1,1003 @@
+@@ -0,0 +1,1004 @@
 +/*
 + * This file is part of mpv.
 + *
@@ -98,6 +98,7 @@ index 0000000000..1b3e13aece
 +#include "sub/osd.h"
 +
 +#import <CoreMedia/CoreMedia.h>
++#import <CoreVideo/CoreVideo.h>
 +#import <AVFoundation/AVFoundation.h>
 +#import <CoreGraphics/CoreGraphics.h>
 +#import <CoreImage/CoreImage.h>
@@ -636,7 +637,7 @@ index 0000000000..1b3e13aece
 +    // Use autoreleasepool to ensure CIImage objects are released promptly
 +    @autoreleasepool {
 +        // Create CIImages - preserve color space from source for HDR
-+        CGColorSpaceRef srcColorSpace = CVImageBufferGetColorSpace(videoBuffer);
++        CGColorSpaceRef srcColorSpace = (CGColorSpaceRef)CVBufferGetAttachment(videoBuffer, kCVImageBufferCGColorSpaceKey, NULL);
 +        CGColorSpaceRef fallbackColorSpace = NULL;
 +        if (!srcColorSpace) {
 +            fallbackColorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
@@ -690,7 +691,7 @@ index 0000000000..1b3e13aece
 +        CIImage *composited = [subtitleImage imageByCompositingOverImage:videoImage];
 +        
 +        // Render to output buffer, preserving color space
-+        CGColorSpaceRef outputColorSpace = CVImageBufferGetColorSpace(videoBuffer);
++        CGColorSpaceRef outputColorSpace = (CGColorSpaceRef)CVBufferGetAttachment(videoBuffer, kCVImageBufferCGColorSpaceKey, NULL);
 +        if (outputColorSpace) {
 +            [p->ciContext render:composited 
 +                 toCVPixelBuffer:outputBuffer 

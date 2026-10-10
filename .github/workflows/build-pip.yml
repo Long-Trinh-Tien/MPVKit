@@ -1,0 +1,52 @@
+name: Build Libmpv with PiP VO (iOS)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag for the built Libmpv (e.g. 0.41.0-n8.1.2-pip.1)'
+        required: true
+        default: '0.41.0-n8.1.2-pip.1'
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    runs-on: macos-14
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install autoconf automake libtool ninja wget pkg-config || true
+          python3 -m pip install meson==1.4.2 || python3 -m pip install --break-system-packages meson==1.4.2 || brew install meson || true
+          meson --version || true
+
+      - name: Show Xcode info
+        run: xcodebuild -showsdks | head -25
+
+      - name: Build Libmpv (LGPL, iOS + simulator)
+        working-directory: ${{ github.workspace }}
+        run: |
+          swift run --build-path ./.build --package-path Sources/BuildScripts build version=${{ inputs.version }} platform=ios
+
+      - name: Show outputs
+        run: ls -la dist/release || true
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.version }}
+          name: ${{ inputs.version }}
+          prerelease: true
+          fail_on_unmatched_files: true
+          files: dist/release/Libmpv*
+
+      - name: Backup artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: libmpv-xcframework
+          path: dist/release/Libmpv*
+          if-no-files-found: warn

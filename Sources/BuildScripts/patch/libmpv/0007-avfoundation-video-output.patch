@@ -68,7 +68,7 @@ new file mode 100644
 index 0000000000..1b3e13aece
 --- /dev/null
 +++ b/video/out/vo_avfoundation.m
-@@ -0,0 +1,1093 @@
+@@ -0,0 +1,1097 @@
 +/*
 + * This file is part of mpv.
 + *
@@ -652,7 +652,7 @@ index 0000000000..1b3e13aece
 +            MP_ERR(vo, "Failed to create CIContext for compositing\n");
 +            return NULL;
 +        }
-+        MP_WARN(vo, "compositing context created on first use\n");
++        MP_WARN(vo, "compositing context created on first use (%p)\n", p->ciContext);
 +    }
 +    
 +    size_t videoW = CVPixelBufferGetWidth(videoBuffer);
@@ -769,8 +769,11 @@ index 0000000000..1b3e13aece
 +               p->displayLayer, p->composite_osd ? "yes" : "no");
 +    p->last_effective_composite = p->composite_osd ? 1 : 0;
 +
-+    // Setup Metal and Core Image for compositing mode (HDR-compatible)
-+    if (p->composite_osd) {
++    // Setup Metal and Core Image eagerly (HDR-compatible): the app switches
++    // compositing on at runtime for Picture in Picture subtitles, so the
++    // context must exist even when the option starts off. Creating it lazily
++    // from draw_frame crashed on first use (EXC_BAD_ACCESS in objc_msgSend).
++    {
 +        p->mtlDevice = MTLCreateSystemDefaultDevice();
 +        if (!p->mtlDevice) {
 +            MP_ERR(vo, "Failed to create Metal device\n");
@@ -819,6 +822,7 @@ index 0000000000..1b3e13aece
 +        p->display_height = (int)(screen.frame.size.height * scaleFactor);
 +#endif
 +        MP_VERBOSE(vo, "Display height for subtitle scaling: %d\n", p->display_height);
++        MP_WARN(vo, "CoreImage compositing ready (%p)\n", p->ciContext);
 +    }
 +
 +    // Create OSD layer only if not in composite mode. Async so the VO thread

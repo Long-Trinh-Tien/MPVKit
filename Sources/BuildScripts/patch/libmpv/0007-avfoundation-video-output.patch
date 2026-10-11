@@ -68,7 +68,7 @@ new file mode 100644
 index 0000000000..1b3e13aece
 --- /dev/null
 +++ b/video/out/vo_avfoundation.m
-@@ -0,0 +1,1097 @@
+@@ -0,0 +1,1106 @@
 +/*
 + * This file is part of mpv.
 + *
@@ -165,6 +165,7 @@ index 0000000000..1b3e13aece
 +    int last_effective_composite;
 +    int req_flush_cooldown;
 +    int failed_flush_cooldown;
++    int diag_counter;
 +};
 +
 +static bool zd_effective_composite(struct priv *p)
@@ -946,6 +947,11 @@ index 0000000000..1b3e13aece
 +                finalBuffer = composited;
 +                needsRelease = true;
 +            }
++            p->diag_counter++;
++            if (p->diag_counter % 120 == 0) {
++                MP_WARN(vo, "compositing: has_sub=%d baked=%d\n",
++                        p->has_subtitle ? 1 : 0, composited ? 1 : 0);
++            }
 +        }
 +        
 +        // Create and enqueue sample buffer
@@ -1131,9 +1137,12 @@ index 0000000000..1b3e13aece
 +        sync_osd_layer_frame(p);
 +        return VO_TRUE;
 +    case VOCTRL_RESET:
-+        // Called when playback stops or video changes
++        // Sent by the player on every seek. Use flush() (keeps the current
++        // image); flushAndRemoveImage() mid-Picture-in-Picture can leave the
++        // floating window frozen/blank until playback ends.
 +        clear_subtitle_state(vo);
-+        [p->displayLayer flushAndRemoveImage];
++        MP_WARN(vo, "reset: flushing layer (image kept)\n");
++        [p->displayLayer flush];
 +        return VO_TRUE;
 +    case VOCTRL_REDRAW:
 +        p->osd_change_id = 0;

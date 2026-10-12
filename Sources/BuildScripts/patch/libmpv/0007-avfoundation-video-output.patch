@@ -68,7 +68,7 @@ new file mode 100644
 index 0000000000..1b3e13aece
 --- /dev/null
 +++ b/video/out/vo_avfoundation.m
-@@ -0,0 +1,1106 @@
+@@ -0,0 +1,1140 @@
 +/*
 + * This file is part of mpv.
 + *
@@ -305,7 +305,9 @@ index 0000000000..1b3e13aece
 +        case IMGFMT_NV12:
 +            return kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
 +        case IMGFMT_420P:
-+            return kCVPixelFormatType_420YpCbCr8Planar;
++            // Uploaded as interleaved NV12 (see upload_software_frame): CoreImage
++            // cannot consume 3-plane buffers, which silently broke compositing.
++            return kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
 +        case IMGFMT_P010:
 +            return kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange;
 +        default:
@@ -368,8 +370,38 @@ index 0000000000..1b3e13aece
 +                       copyBytes);
 +            }
 +        }
++    } else if (mpi->imgfmt == IMGFMT_420P && planeCount == 2) {
++        // 3-plane YUV420P (software decode) -> interleaved NV12.
++        {
++            void *dst = CVPixelBufferGetBaseAddressOfPlane(pixbuf, 0);
++            size_t dstStride = CVPixelBufferGetBytesPerRowOfPlane(pixbuf, 0);
++            size_t dstHeight = CVPixelBufferGetHeightOfPlane(pixbuf, 0);
++            uint8_t *src = mpi->planes[0];
++            size_t srcStride = mpi->stride[0];
++            if (src) {
++                size_t copyBytes = MPMIN(dstStride, srcStride);
++                for (size_t y = 0; y < dstHeight; y++)
++                    memcpy((uint8_t *)dst + y * dstStride, src + y * srcStride, copyBytes);
++            }
++        }
++        if (mpi->planes[1] && mpi->planes[2]) {
++            void *dstUV = CVPixelBufferGetBaseAddressOfPlane(pixbuf, 1);
++            size_t dstStrideUV = CVPixelBufferGetBytesPerRowOfPlane(pixbuf, 1);
++            size_t chromaH = CVPixelBufferGetHeightOfPlane(pixbuf, 1);
++            int chromaW = (mpi->w + 1) / 2;
++            for (size_t y = 0; y < chromaH; y++) {
++                const uint8_t *u = mpi->planes[1] + y * mpi->stride[1];
++                const uint8_t *v = mpi->planes[2] + y * mpi->stride[2];
++                uint8_t *d = (uint8_t *)dstUV + y * dstStrideUV;
++                for (int x = 0; x < chromaW && x < mpi->stride[1] &&
++                     2 * x + 1 < (int)dstStrideUV; x++) {
++                    d[2 * x] = u[x];
++                    d[2 * x + 1] = v[x];
++                }
++            }
++        }
 +    } else {
-+        // Planar format (NV12, YUV420P, P010)
++        // Planar format (NV12, P010)
 +        for (size_t plane = 0; plane < planeCount && plane < MP_MAX_PLANES; plane++) {
 +            void *dst = CVPixelBufferGetBaseAddressOfPlane(pixbuf, plane);
 +            size_t dstStride = CVPixelBufferGetBytesPerRowOfPlane(pixbuf, plane);
@@ -708,6 +740,8 @@ index 0000000000..1b3e13aece
 +            CGColorSpaceRelease(fallbackColorSpace);
 +        
 +        if (!videoImage) {
++            MP_ERR(vo, "CIImage from pixel buffer failed (format=%d %zux%zu)\n",
++                   (int)sourceFormat, videoW, videoH);
 +            CVPixelBufferRelease(outputBuffer);
 +            return NULL;
 +        }

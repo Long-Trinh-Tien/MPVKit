@@ -68,7 +68,7 @@ new file mode 100644
 index 0000000000..1b3e13aece
 --- /dev/null
 +++ b/video/out/vo_avfoundation.m
-@@ -0,0 +1,1140 @@
+@@ -0,0 +1,1160 @@
 +/*
 + * This file is part of mpv.
 + *
@@ -178,8 +178,12 @@ index 0000000000..1b3e13aece
 +{
 +    if (p->composite_osd || !p->osdLayer || !p->displayLayer)
 +        return;
++    // Capture the layers locally: the VO (and its priv) may be torn down
++    // before the main queue runs this block (use-after-free crash).
++    CALayer *osdLayer = p->osdLayer;
++    AVSampleBufferDisplayLayer *displayLayer = p->displayLayer;
 +    dispatch_async(dispatch_get_main_queue(), ^{
-+        p->osdLayer.frame = p->displayLayer.bounds;
++        osdLayer.frame = displayLayer.bounds;
 +    });
 +}
 +
@@ -544,10 +548,13 @@ index 0000000000..1b3e13aece
 +                    p->cachedSubtitleImage = NULL;
 +                }
 +            } else {
++                // CALayer mode: update layer on main thread. Capture the layer
++                // locally - the VO priv may already be freed when this runs.
++                CALayer *osdLayer = p->osdLayer;
 +                dispatch_async(dispatch_get_main_queue(), ^{
 +                    [CATransaction begin];
 +                    [CATransaction setDisableActions:YES];
-+                    p->osdLayer.contents = nil;
++                    osdLayer.contents = nil;
 +                    [CATransaction commit];
 +                });
 +            }
@@ -573,11 +580,13 @@ index 0000000000..1b3e13aece
 +            CGImageRelease(p->cachedSubtitleImage);
 +        p->cachedSubtitleImage = subtitleImage;
 +    } else {
-+        // CALayer mode: update layer on main thread
++        // CALayer mode: update layer on main thread. Capture the layer locally
++        // - the VO priv may already be freed when this block runs.
++        CALayer *osdLayer = p->osdLayer;
 +        dispatch_async(dispatch_get_main_queue(), ^{
 +            [CATransaction begin];
 +            [CATransaction setDisableActions:YES];
-+            p->osdLayer.contents = (__bridge id)subtitleImage;
++            osdLayer.contents = (__bridge id)subtitleImage;
 +            CGImageRelease(subtitleImage);
 +            [CATransaction commit];
 +        });
@@ -638,10 +647,11 @@ index 0000000000..1b3e13aece
 +                p->cachedSubtitleImage = NULL;
 +            }
 +        } else if (p->osdLayer) {
++            CALayer *osdLayer = p->osdLayer;
 +            dispatch_async(dispatch_get_main_queue(), ^{
 +                [CATransaction begin];
 +                [CATransaction setDisableActions:YES];
-+                p->osdLayer.contents = nil;
++                osdLayer.contents = nil;
 +                [CATransaction commit];
 +            });
 +        }
@@ -863,24 +873,29 @@ index 0000000000..1b3e13aece
 +    // Create OSD layer only if not in composite mode. Async so the VO thread
 +    // never waits on the main thread (which may be blocked in an mpv call).
 +    if (!p->composite_osd) {
++        // Create the layer up front (plain CALayer creation is thread-safe) and
++        // configure/attach it on the main queue via local captures, so a
++        // torn-down VO priv can never be dereferenced from the block.
++        CALayer *osdLayer = [CALayer layer];
++        p->osdLayer = osdLayer;
++        AVSampleBufferDisplayLayer *displayLayer = p->displayLayer;
 +        dispatch_async(dispatch_get_main_queue(), ^{
-+            p->osdLayer = [CALayer layer];
-+            CGRect bounds = p->displayLayer.bounds;
-+            p->osdLayer.frame = bounds;
-+            p->osdLayer.anchorPoint = CGPointMake(0.5, 0.5);
-+            p->osdLayer.position = CGPointMake(CGRectGetMidX(bounds), CGRectGetMidY(bounds));
++            CGRect bounds = displayLayer.bounds;
++            osdLayer.frame = bounds;
++            osdLayer.anchorPoint = CGPointMake(0.5, 0.5);
++            osdLayer.position = CGPointMake(CGRectGetMidX(bounds), CGRectGetMidY(bounds));
 +            
 +#if TARGET_OS_IPHONE
-+            p->osdLayer.contentsScale = [UIScreen mainScreen].scale;
++            osdLayer.contentsScale = [UIScreen mainScreen].scale;
 +#else
-+            p->osdLayer.contentsScale = [NSScreen mainScreen].backingScaleFactor;
++            osdLayer.contentsScale = [NSScreen mainScreen].backingScaleFactor;
 +#endif
 +            
-+            p->osdLayer.backgroundColor = NULL;
-+            p->osdLayer.opaque = NO;
-+            p->osdLayer.contentsGravity = kCAGravityResizeAspect;
++            osdLayer.backgroundColor = NULL;
++            osdLayer.opaque = NO;
++            osdLayer.contentsGravity = kCAGravityResizeAspect;
 +            
-+            [p->displayLayer addSublayer:p->osdLayer];
++            [displayLayer addSublayer:osdLayer];
 +        });
 +    }
 +
@@ -1103,10 +1118,15 @@ index 0000000000..1b3e13aece
 +    p->osd_change_id = 0;
 +    
 +    if (!p->composite_osd && p->osdLayer) {
++        // Capture the layer locally: clear_subtitle_state often runs during
++        // teardown (VOCTRL_RESET / reconfig on episode switches) and the VO
++        // priv can be freed before the main queue executes this block - that
++        // use-after-free crashed on the main thread.
++        CALayer *osdLayer = p->osdLayer;
 +        dispatch_async(dispatch_get_main_queue(), ^{
 +            [CATransaction begin];
 +            [CATransaction setDisableActions:YES];
-+            p->osdLayer.contents = nil;
++            osdLayer.contents = nil;
 +            [CATransaction commit];
 +        });
 +    }

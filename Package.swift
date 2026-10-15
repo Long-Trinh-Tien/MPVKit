@@ -301,8 +301,8 @@ let package = Package(
 
         .binaryTarget(
             name: "Libmpv",
-            url: "https://github.com/Long-Trinh-Tien/MPVKit/releases/download/0.41.0-n8.1.2-pip.8/Libmpv.xcframework.zip",
-            checksum: "1e30fe4d26f6d5bd658e83dd12e2acbec6da424b0e5099537f8d58bdff3a0745"
+            url: "https://github.com/Long-Trinh-Tien/MPVKit-pip/releases/download/0.41.0-n8.1.2-pip.9/Libmpv.xcframework.zip",
+            checksum: "0f326ec3f81f27f28a4b244e04b77c639048d3308c2057a546c5c2feaf9225ad"
         ),
         //AUTO_GENERATE_TARGETS_END//
     ]
